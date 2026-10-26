@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IN-SPACe CAN7USAT | Mission Control Ground Station — Team Astrolytics</title>
+  
+  <!-- Favicon & Identity -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛰️</text></svg>">
+
+  <!-- Google Font: Noto Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN with Custom Avionics Theme -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Noto Sans', 'system-ui', 'sans-serif'],
+            mono: ['Noto Sans', 'system-ui', 'sans-serif'],
+            display: ['Noto Sans', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            space: {
+              950: '#070a12',
+              900: '#0d1322',
+              850: '#121a2d',
+              800: '#18233c',
+              700: '#263554',
+              600: '#384b73',
+            },
+            telemetry: {
+              cyan: '#06b6d4',
+              amber: '#f59e0b',
+              emerald: '#10b981',
+              purple: '#8b5cf6',
+              rose: '#f43f5e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+  <!-- External CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+
+  <style>
+    /* Default clean white cockpit/dashboard background */
+    html body, html.light body {
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    
+    html.dark body {
+      background-color: #070a12;
+      color: #e2e8f0;
+    }
+
+    /* Precision Terminal Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    html.dark ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    html.dark ::-webkit-scrollbar-thumb {
+      background: #334155;
+    }
+    html.dark ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Battery Ring Progress */
+    .ring-progress {
+      transition: stroke-dashoffset 0.35s ease-in-out, stroke 0.3s ease;
+      transform: rotate(-90deg);
+      transform-origin: 50% 50%;
+    }
+
+    /* Subtle Avionics Status Pulse */
+    @keyframes avionics-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.03); }
+    }
+    .badge-live {
+      animation: avionics-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Leaflet Container Styling */
+    .leaflet-container {
+      background: #f8fafc !important;
+    }
+    .dark .leaflet-tile-pane {
+      filter: brightness(0.72) invert(1) contrast(1.15) hue-rotate(200deg) saturate(0.65);
+    }
+    .dark .leaflet-container {
+      background: #0d1322 !important;
+    }
+
+    /* Optical Video Filters & Scanline Overlays */
+    .camera-scanlines {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+      background-size: 100% 4px;
+    }
+    .filter-thermal {
+      filter: contrast(180%) hue-rotate(180deg) saturate(260%) invert(20%);
+    }
+    .filter-nightvision {
+      filter: sepia(100%) hue-rotate(90deg) saturate(320%) contrast(140%) brightness(95%);
+    }
+    .filter-edgedetect {
+      filter: grayscale(100%) contrast(500%) invert(100%);
+    }
+
+    /* Camera Shutter Flash */
+    @keyframes shutter-flash {
+      0% { opacity: 0.95; }
+      100% { opacity: 0; }
+    }
+    .shutter-flash-active {
+      animation: shutter-flash 0.28s ease-out forwards;
+    }
+
+    /* Warning Siren / Klaxon Pulse Animation */
+    @keyframes klaxon-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+      50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    }
+    .klaxon-active {
+      animation: klaxon-pulse 1s infinite;
+    }
+
+    /* Section Tab Active Styling */
+    .section-tab-btn.active {
+      background-color: #2563eb;
+      color: #ffffff !important;
+      border-color: #1d4ed8 !important;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);
+    }
+    .dark .section-tab-btn.active {
+      background-color: #0284c7;
+      color: #ffffff !important;
+      border-color: #0369a1 !important;
+      box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3);
+    }
+
+    /* CAN7USAT GCS: consistent cockpit hierarchy, legibility and input states */
+    :root {
+      color-scheme: light;
+      --gcs-accent: #0757c7;
+      --gcs-focus: #0ea5e9;
+    }
+    html.dark { color-scheme: dark; }
+    html body {
+      background-image: linear-gradient(180deg, rgba(226, 236, 248, .42), transparent 22rem);
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    html.dark body {
+      background-image: radial-gradient(ellipse at 50% -20%, rgba(14, 165, 233, .10), transparent 48rem);
+    }
+    button, select, input { font: inherit; }
+    button { touch-action: manipulation; }
+    button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--gcs-focus) !important;
+      outline-offset: 2px;
+      z-index: 2;
+    }
+    ::selection { background: rgba(14, 165, 233, .26); }
+    header {
+      border-bottom-color: #cbd5e1 !important;
+      box-shadow: 0 5px 18px rgba(15, 23, 42, .07) !important;
+    }
+    html.dark header { border-bottom-color: #263554 !important; }
+    header > div { align-items: center; }
+    .gcs-header-layout {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(480px, 1.5fr) minmax(0, 1fr);
+      grid-template-areas: "brand head partner" "status status status" "stepper stepper stepper" "controls controls controls";
+      align-items: center;
+      gap: 8px 20px;
+    }
+    .gcs-header-brand { grid-area: brand; min-width: 0; justify-self: start; }
+    .gcs-header-university { grid-area: partner; min-width: 0; justify-self: end; }
+    .gcs-header-phase { display: contents !important; }
+    .gcs-header-phase > div:first-child { grid-area: head; justify-self: center; min-width: 0; }
+    .gcs-header-phase > div:nth-child(2) { grid-area: status; justify-self: center; }
+    .gcs-header-phase > div:last-child {
+      grid-area: stepper;
+      justify-self: center;
+      width: max-content;
+      max-width: 100%;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+    .gcs-header-layout .gcs-header-phase > div:last-child { max-width: 100%; }
+    .gcs-header-controls {
+      grid-area: controls;
+      justify-self: stretch;
+      min-width: 0;
+      max-width: 100%;
+      width: 100%;
+      justify-content: center;
+      padding-top: 7px;
+      border-top: 1px solid #e2e8f0;
+    }
+    html.dark .gcs-header-controls { border-top-color: #263554; }
+    .gcs-logo-card {
+      height: 72px;
+      display: grid;
+      place-items: center;
+      padding: 6px 9px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 2px 7px rgba(15, 23, 42, .08);
+      overflow: hidden;
+    }
+    .gcs-logo-astro { width: 182px; height: 120px; }
+    .gcs-logo-university { width: 194px; }
+    .gcs-logo-kcc { width: 260px; height: 72px; }
+    .gcs-logo-card img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+    .gcs-center-identity { display: grid; justify-items: center; gap: 5px; text-align: center; }
+    .gcs-center-identity h1 { line-height: 1.1; font-size: clamp(22px, 1.65vw, 32px); }
+    .gcs-header-phase > div:nth-child(2) { align-items: center; gap: 12px; margin: 0; }
+    .gcs-header-phase > div:nth-child(2) > span:first-child { font-size: 11px; }
+    #mission-state-badge { min-height: 34px; padding-inline: 16px; font-size: 13px; }
+    .gcs-center-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px 8px; }
+    html.dark .gcs-logo-card { border-color: #334155; box-shadow: 0 2px 9px rgba(0, 0, 0, .25); }
+    header > div > div:nth-child(2) {
+      min-width: 0;
+      max-width: 100%;
+    }
+    header > div > div:nth-child(2) > div:last-child {
+      max-width: min(100%, 1120px);
+      overflow-x: auto;
+      scrollbar-width: thin;
+      padding: 3px 2px 6px;
+    }
+    header > div > div:nth-child(3) { justify-content: flex-end; }
+    header select { min-height: 36px; }
+    header button, nav button { min-height: 36px; }
+    #mission-state-badge { min-height: 34px; padding-inline: 16px; }
+    nav {
+      position: relative !important;
+      top: auto !important;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, .045) !important;
+    }
+    nav > div { min-width: 0; }
+    nav > div > div:first-child {
+      max-width: 100%;
+      scrollbar-width: thin;
+    }
+    .section-tab-btn { white-space: nowrap; min-height: 40px; }
+    main { padding-top: 20px !important; }
+    .workspace-section > div:first-child {
+      padding-bottom: 12px;
+      margin-bottom: 4px;
+    }
+    main [class*="rounded-2xl"][class*="border"][class*="bg-white"] {
+      border-color: #d7e0eb;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .045);
+    }
+    html.dark main [class*="rounded-2xl"][class*="border"][class*="bg-white"] {
+      border-color: #263554;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+    }
+    #telemetry-warning { line-height: 1.35; }
+    @media (min-width: 1600px) {
+      .gcs-header-layout { grid-template-columns: minmax(0, 1fr) minmax(480px, 1.5fr) minmax(0, 1fr); }
+    }
+    @media (min-width: 1280px) and (max-width: 1599px) {
+      .gcs-header-layout { grid-template-columns: minmax(0, 1fr) minmax(480px, 1.5fr) minmax(0, 1fr); }
+    }
+    @media (min-width: 1280px) {
+      .gcs-header-phase > div:last-child { display: flex !important; }
+    }
+    @media (max-width: 1279px) {
+      .gcs-header-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "brand partner" "phase phase" "controls controls"; gap: 10px; }
+      .gcs-header-brand { justify-self: start; }
+      .gcs-header-university { justify-self: end; }
+      .gcs-header-phase { display: flex !important; grid-area: phase; flex-direction: column; align-items: center; }
+      .gcs-header-phase > div:last-child { display: none !important; }
+      .gcs-header-controls { justify-self: stretch; }
+    }
+    @media (max-width: 640px) {
+      header { position: relative !important; }
+      .gcs-header-brand { width: auto; justify-self: start; }
+      .gcs-header-university { justify-self: end; }
+      .gcs-header-controls { justify-content: center; }
+      .gcs-header-controls > div { max-width: 100%; }
+      .gcs-header-controls select { max-width: 42vw; }
+      .gcs-center-meta { font-size: 10px; }
+      .gcs-logo-astro { width: 140px; height: 92px; }
+      nav { position: relative !important; }
+      main { padding: 14px 12px !important; }
+      .workspace-section { scroll-margin-top: 12px; }
+    }
+    @media (max-width: 380px) {
+      .gcs-logo-card { height: 60px; }
+      .gcs-logo-astro { width: 120px; height: 78px; }
+      .gcs-logo-university { width: 166px; }
+      .gcs-logo-kcc { width: 230px; height: 64px; }
+      .gcs-header-layout { column-gap: 6px; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-cyan-500 selection:text-black transition-colors duration-200">
+
+  <!-- ========================================================================= -->
+  <!-- 1. TELEMETRY LINK & SYSTEM WARNING ALERT BANNER                           -->
+  <!-- ========================================================================= -->
+  <aside id="telemetry-warning" class="hidden bg-rose-600 text-white px-4 py-2 font-bold flex flex-wrap items-center justify-between border-b-2 border-rose-700 shadow-lg sticky top-0 z-50">
+    <div class="flex items-center gap-2.5">
+      <i data-lucide="alert-octagon" class="w-5 h-5 text-white stroke-[2.5] animate-bounce"></i>
+      <span class="text-xs sm:text-sm tracking-wide" id="warning-message-text">
+        <strong>CRITICAL FLIGHT WARNING:</strong> Telemetry packet loss exceeded safety threshold (>15%). Antenna realignment advised!
+      </span>
+    </div>
+    <div class="flex items-center gap-2">
+      <!-- Direct Alarm Sound Test from banner -->
+      <button id="btn-banner-test-alarm" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-rose-700 rounded-lg text-xs font-black shadow-sm flex items-center gap-1.5 transition-all" title="Trigger Warning Sound Test">
+        <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+        <span>Sound Alarm</span>
+      </button>
+      <span class="font-mono text-xs bg-rose-800/80 px-2 py-0.5 rounded text-white font-bold border border-rose-400/40">SYS_WARN</span>
+      <button onclick="document.getElementById('telemetry-warning').classList.add('hidden')" class="p-1 hover:bg-rose-700 rounded transition-colors" title="Dismiss Alert">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========================================================================= -->
+  <!-- 2. FLIGHT OPERATIONS HEADER & MISSION CONTROL BAR                         -->
+  <!-- ========================================================================= -->
+  <header class="bg-white dark:bg-space-900/95 border-b border-slate-200 dark:border-space-800 sticky top-0 z-40 backdrop-blur-md px-3.5 lg:px-6 py-2.5 shadow-sm">
+    <div class="max-w-[1920px] mx-auto gcs-header-layout">
+      
+      <!-- Brand & Mission Identity -->
+      <div class="gcs-header-brand" role="group" aria-label="Astrolytics team logo">
+        <div class="gcs-logo-card gcs-logo-astro">
+          <img src="assets/astrolytics-logo.jpeg" alt="Astrolytics" width="1061" height="698" fetchpriority="high">
+        </div>
+      </div>
+
+      <!-- Center: Flight Phase Progress Tracker (Green & Red Combination) -->
+      <div class="gcs-header-phase flex flex-col items-center justify-center">
+        <div class="gcs-center-identity">
+          <div class="gcs-logo-card gcs-logo-kcc">
+            <img src="assets/kalpana-chawla-centre.png" alt="Kalpana Chawla Centre" width="540" height="134" fetchpriority="high">
+          </div>
+          <div class="flex items-center justify-center gap-2 flex-wrap">
+            <h1 class="text-lg lg:text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase font-display">IN-SPACe CAN7USAT</h1>
+            <span class="bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold tracking-wider">2026</span>
+            <span id="gcs-link-status" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/30" aria-live="polite">
+              <span id="gcs-link-indicator" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+              <span id="gcs-link-text">LINK STANDBY</span>
+            </span>
+          </div>
+          <div class="gcs-center-meta text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+            <span class="text-slate-800 dark:text-slate-300 font-bold">Team Astrolytics</span>
+            <span class="text-slate-300 dark:text-slate-600">•</span>
+            <span class="font-mono font-bold text-cyan-600 dark:text-cyan-400 cursor-pointer select-none transition-colors hover:text-cyan-300" id="clock-utc" title="Exact Real-Time UTC (Click to toggle format)">UTC: 00:00:00.000</span>
+            <span class="text-slate-300 dark:text-slate-600">•</span>
+            <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400" id="mission-elapsed-time">MET: 00:00:00</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <i data-lucide="compass" class="w-3 h-3 text-blue-600 dark:text-cyan-400"></i> Mission Phase:
+          </span>
+          <!-- Dynamic High-Visibility Badge -->
+          <div id="mission-state-badge" class="px-3 py-0.5 rounded-full text-xs font-black tracking-wider uppercase bg-emerald-600 text-white border border-emerald-500 shadow-sm flex items-center gap-1.5">
+            <i data-lucide="radio" class="w-3.5 h-3.5 animate-pulse text-white"></i>
+            <span>PRE-FLIGHT</span>
+          </div>
+          <!-- Green & Red Color Legend Badge -->
+          <span class="hidden md:inline-flex items-center gap-1 text-[9px] font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-space-850 px-2 py-0.5 rounded-md border border-slate-200 dark:border-space-700">
+            <span class="text-emerald-600 font-bold">● Green = Ready/Done</span>
+            <span class="text-slate-300">|</span>
+            <span class="text-rose-600 font-bold">● Red = Incomplete</span>
+          </span>
+        </div>
+
+        <!-- 7-Phase Stepper Tracker: Completed = Green, Active = Glowing Green, Incomplete = Red -->
+        <div class="hidden xl:flex items-center gap-1 text-[11px] font-bold">
+          <!-- Phase 1: Pre-Flight -->
+          <button id="step-pill-pre" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white font-black text-xs border-2 border-emerald-300 ring-2 ring-emerald-400/50 shadow-md animate-pulse transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 1: Pre-Flight Check (Click to jump)">
+            <span class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+            <span>1. Pre-Flight Check</span>
+          </button>
+          
+          <span id="step-arrow-1" class="text-rose-400 font-black text-xs">→</span>
+
+          <!-- Phase 2: Pad -->
+          <button id="step-pill-pad" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-300 dark:border-rose-800 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 2: Launch Pad (Click to jump)">
+            <span class="w-2 h-2 rounded-full border border-rose-500"></span>
+            <span>2. Launch Pad</span>
+          </button>
+
+          <span id="step-arrow-2" class="text-rose-400 font-black text-xs">→</span>
+
+          <!-- Phase 3: Ascent -->
+          <button id="step-pill-ascent" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-300 dark:border-rose-800 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 3: Rocket Ascent (Click to jump)">
+            <span class="w-2 h-2 rounded-full border border-rose-500"></span>
+            <span>3. Rocket Ascent</span>
+          </button>
+
+          <span id="step-arrow-3" class="text-rose-400 font-black text-xs">→</span>
+
+          <!-- Phase 4: Apogee -->
+          <button id="step-pill-apogee" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-300 dark:border-rose-800 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 4: Peak Altitude (Apogee) (Click to jump)">
+            <span class="w-2 h-2 rounded-full border border-rose-500"></span>
+            <span>4. Peak (Apogee)</span>
+          </button>
+
+          <span id="step-arrow-4" class="text-rose-400 font-black text-xs">→</span>
+
+          <!-- Phase 5: Main -->
+          <button id="step-pill-main" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-300 dark:border-rose-800 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 5: Main Parachute Canopy (Click to jump)">
+            <span class="w-2 h-2 rounded-full border border-rose-500"></span>
+            <span>5. Main Chute</span>
+          </button>
+
+          <span id="step-arrow-5" class="text-rose-400 font-black text-xs">→</span>
+
+          <!-- Phase 6: Touchdown -->
+          <button id="step-pill-touchdown" class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold text-xs border border-rose-300 dark:border-rose-800 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Phase 6: Ground Touchdown & Recovery (Click to jump)">
+            <span class="w-2 h-2 rounded-full border border-rose-500"></span>
+            <span>6. Safe Landing</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="gcs-header-university" role="group" aria-label="Chandigarh University logo">
+        <div class="gcs-logo-card gcs-logo-university">
+          <img src="assets/chandigarh-university-logo.png" alt="Chandigarh University" width="982" height="364" fetchpriority="high">
+        </div>
+      </div>
+
+      <!-- Right: Link Controls, Safety Interlock, Quick Sim & Utilities -->
+      <div class="gcs-header-controls flex flex-wrap items-center gap-2 lg:gap-3">
+        
+        <!-- 🚀 Quick Sim 1-Click Toggle -->
+        <button id="btn-quick-sim" class="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-xs font-bold shadow-md shadow-blue-600/20 border border-blue-400/30 flex items-center gap-1.5 transition-all" title="Start / Stop Realistic Flight Simulation">
+          <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
+          <span>Quick Sim</span>
+        </button>
+
+        <!-- Serial Link Pod -->
+        <div class="flex items-center bg-slate-50 dark:bg-space-850 border border-slate-300 dark:border-space-800 rounded-lg p-1 gap-1.5 shadow-inner">
+          <select id="com-port-select" class="bg-white dark:bg-space-900 text-xs font-mono font-medium text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-space-700 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+            <option value="SIMULATOR" selected>🚀 Simulation (Virtual Flight)</option>
+            <option value="SERIAL">⚡ BlackPill (Web Serial API)</option>
+            <option value="COM3">COM3 (LoRa SX1278 868MHz)</option>
+            <option value="COM4">COM4 (STM32 USB CDC)</option>
+            <option value="ws://localhost:8080">ws://localhost:8080 (Bridge)</option>
+          </select>
+
+          <select id="baud-rate-select" class="bg-white dark:bg-space-900 text-xs font-mono font-medium text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-space-700 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer">
+            <option value="9600">9600</option>
+            <option value="57600">57600</option>
+            <option value="115200" selected>115200</option>
+            <option value="230400">230400</option>
+          </select>
+
+          <button id="connect-btn" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold rounded shadow-sm transition-all flex items-center gap-1.5">
+            <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+            <span>Connect</span>
+          </button>
+        </div>
+
+        <!-- Physical-Style Arming Guard Switch -->
+        <button id="arm-toggle" class="px-3 py-1.5 rounded-lg text-xs font-black tracking-wider uppercase transition-all shadow-sm flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-space-850 dark:hover:bg-space-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-space-700" title="Toggle Pyrotechnic & Actuator Arming Interlock (HotKey: Space)">
+          <i data-lucide="shield-off" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span>DISARMED</span>
+        </button>
+
+        <!-- Pre-Flight Diagnostics Wizard Button -->
+        <button id="btn-calibration" class="px-2.5 py-1.5 bg-white hover:bg-slate-50 dark:bg-space-850 dark:hover:bg-space-800 text-blue-600 dark:text-cyan-400 border border-blue-500/30 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" title="Open Pre-Flight Calibration Wizard (HotKey: C)">
+          <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Pre-Flight</span>
+        </button>
+
+        <!-- 🚨 WARNING SOUND TEST BUTTON -->
+        <button id="btn-test-alarm" class="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-lg text-xs font-black flex items-center gap-1.5 shadow-sm transition-all" title="Test Aerospace Warning Klaxon / Alarm Sound">
+          <i data-lucide="volume-2" class="w-3.5 h-3.5 text-rose-600"></i>
+          <span>Alarm Sound</span>
+        </button>
+
+        <!-- Utility Buttons Cluster -->
+        <div class="flex items-center gap-1 border-l border-slate-200 dark:border-space-800 pl-2">
+          <!-- Audio Beep Toggle -->
+          <button id="btn-audio-toggle" class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-space-800 rounded-lg transition-colors" title="Toggle Mission Audio Chimes (HotKey: M)">
+            <i data-lucide="volume-2" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+          </button>
+          
+          <!-- Theme Toggle (White Sunlight / Cockpit Dark) -->
+          <button id="btn-theme-toggle" class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-space-800 rounded-lg transition-colors" title="Switch Theme (Dark Cockpit / Field Sunlight)">
+            <i data-lucide="moon" class="w-4 h-4"></i>
+          </button>
+          
+          <!-- Fullscreen Toggle -->
+          <button id="btn-fullscreen" class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-space-800 rounded-lg transition-colors" title="Toggle Fullscreen (HotKey: F)">
+            <i data-lucide="maximize-2" class="w-4 h-4"></i>
+          </button>
+
+          <!-- Shortcuts Modal Button -->
+          <button id="btn-shortcuts" class="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-space-800 rounded-lg transition-colors" title="Keyboard Shortcuts (HotKey: ?)">
+            <i data-lucide="help-circle" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 3. PRIMARY TELEMETRY HUD RIBBON (Key Flight Parameters At A Glance)       -->
+  <!-- ========================================================================= -->
+  <section class="bg-slate-100 dark:bg-space-950 border-b border-slate-200 dark:border-space-800 px-3.5 lg:px-6 py-2 transition-colors">
+    <div class="max-w-[1920px] mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      
+      <!-- 1. Relative Altitude (AGL) -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">Altitude (AGL)</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <span id="alt-value" class="font-mono text-xl lg:text-2xl font-black text-blue-600 dark:text-cyan-400 tracking-tight">--</span>
+            <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">m</span>
+          </div>
+        </div>
+        <div class="p-2 bg-blue-500/10 text-blue-600 dark:text-cyan-400 rounded-lg">
+          <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <!-- 2. Vertical Velocity -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">Vertical Velocity</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <span id="vz-value" class="font-mono text-xl lg:text-2xl font-black text-slate-500 dark:text-slate-400 tracking-tight">--</span>
+            <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">m/s</span>
+          </div>
+        </div>
+        <div id="vz-trend" class="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg">
+          <i data-lucide="arrow-up" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <!-- 3. Acceleration G-Force -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">Inertial G-Load</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <span id="accel-mag" class="font-mono text-xl lg:text-2xl font-black text-slate-500 dark:text-slate-400 tracking-tight">--</span>
+            <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">g</span>
+          </div>
+        </div>
+        <div id="accel-trend" class="p-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-lg">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <!-- 4. Battery Pack Health -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">Battery Bus (2S)</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <span id="voltage-value" class="font-mono text-xl lg:text-2xl font-black text-slate-500 dark:text-slate-400 tracking-tight">--</span>
+            <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">V</span>
+          </div>
+        </div>
+        <div class="p-2 bg-slate-500/10 text-slate-500 dark:text-slate-400 rounded-lg">
+          <i data-lucide="battery-charging" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <!-- 5. RF Telemetry Link Margin -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">LoRa Signal</span>
+            <span id="packet-loss" class="font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400">-- loss</span>
+          </div>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="rssi-val-text" class="font-mono text-lg font-black text-slate-500 dark:text-slate-400 tracking-tight">-- dBm</span>
+            <span id="snr-value" class="font-mono text-xs font-bold text-slate-500 dark:text-slate-400">-- dB</span>
+          </div>
+        </div>
+        <div class="p-2 bg-slate-500/10 text-slate-500 dark:text-slate-400 rounded-lg">
+          <i data-lucide="radio-tower" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+      <!-- 6. GNSS Fix & Distance to Pad -->
+      <div class="bg-white dark:bg-space-900 rounded-xl border border-slate-200 dark:border-space-800 p-2.5 flex items-center justify-between shadow-sm">
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider block">GNSS Solution</span>
+            <span id="fix-type" class="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/30">NO FIX</span>
+          </div>
+          <div class="flex items-baseline gap-1.5 mt-0.5">
+            <span id="distance-gcs" class="font-mono text-lg font-black text-slate-500 dark:text-slate-400 tracking-tight">--</span>
+            <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">m range</span>
+            <span class="text-[10px] font-mono text-slate-400">(<span id="sat-count">0</span> SVs)</span>
+          </div>
+        </div>
+        <div class="p-2 bg-blue-500/10 text-blue-600 dark:text-cyan-400 rounded-lg">
+          <i data-lucide="map-pin" class="w-4 h-4"></i>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 4. MASTER WORKSPACE SECTIONS NAVIGATION (De-Clustering UX)               -->
+  <!-- ========================================================================= -->
+  <nav class="bg-white dark:bg-space-900 border-b border-slate-200 dark:border-space-800 px-3.5 lg:px-6 py-2 shadow-xs sticky top-[57px] z-30">
+    <div class="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      
+      <!-- Section Selector Tabs -->
+      <div class="flex items-center gap-1.5 overflow-x-auto py-0.5 text-xs font-bold font-sans">
+        
+        <!-- Tab 1: Cockpit -->
+        <button data-section-tab="cockpit" class="section-tab-btn active px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-slate-100 dark:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="compass" class="w-4 h-4"></i>
+          <span>1. Flight Cockpit</span>
+        </button>
+
+        <!-- Tab 2: Optical Camera (WHOLE DEDICATED SECTION) -->
+        <button data-section-tab="camera" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="video" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+          <span>2. Optical Camera & Vision</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-blue-100 text-blue-800 dark:bg-cyan-900/60 dark:text-cyan-300 font-mono font-bold">DEDICATED</span>
+        </button>
+
+        <!-- Tab 3: Search & Recovery -->
+        <button data-section-tab="sar" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="map" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+          <span>3. Search & Recovery (SAR)</span>
+        </button>
+
+        <!-- Tab 4: Subsystems & Avionics -->
+        <button data-section-tab="avionics" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="zap" class="w-4 h-4 text-amber-600 dark:text-amber-400"></i>
+          <span>4. Subsystems & Avionics</span>
+        </button>
+
+        <!-- Tab 5: Operations Console -->
+        <button data-section-tab="console" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="terminal" class="w-4 h-4 text-purple-600 dark:text-purple-400"></i>
+          <span>5. Operations Console</span>
+        </button>
+
+        <!-- Tab 6: Testing & Benchmarks -->
+        <button data-section-tab="testing" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="gauge" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+          <span>6. Testing & Benchmarks</span>
+          <span class="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-mono font-bold">NEW</span>
+        </button>
+
+        <!-- Tab 7: Master Overview (All Sections) -->
+        <button data-section-tab="all" class="section-tab-btn px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-space-700 bg-white hover:bg-slate-50 dark:bg-space-900 dark:hover:bg-space-800 text-slate-700 dark:text-slate-200 flex items-center gap-2 transition-all">
+          <i data-lucide="layout-grid" class="w-4 h-4"></i>
+          <span>Master Overview (All)</span>
+        </button>
+
+      </div>
+
+      <!-- Quick Switcher Key Hint -->
+      <div class="hidden lg:flex items-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+        <span>Focus Hotkeys:</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-space-800 rounded border border-slate-300 dark:border-space-700">1</kbd>
+        <span>Cockpit</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-space-800 rounded border border-slate-300 dark:border-space-700">2</kbd>
+        <span>Camera</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-space-800 rounded border border-slate-300 dark:border-space-700">3</kbd>
+        <span>Map</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-space-800 rounded border border-slate-300 dark:border-space-700">6</kbd>
+        <span>Testing</span>
+        <kbd class="px-1.5 py-0.5 bg-slate-100 dark:bg-space-800 rounded border border-slate-300 dark:border-space-700">0</kbd>
+        <span>All</span>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ========================================================================= -->
+  <!-- 5. MAIN COCKPIT DASHBOARD SECTIONS (Spacious & Modular)                  -->
+  <!-- ========================================================================= -->
+  <main class="flex-1 p-3 lg:p-5 max-w-[1920px] w-full mx-auto space-y-6">
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 1: FLIGHT COCKPIT & TRAJECTORY PROFILE                          -->
+    <!-- ======================================================================= -->
+    <section id="section-cockpit" class="workspace-section space-y-4">
+      
+      <!-- Section Header & Cockpit Sub-Navigation Tabs (Matching Reference) -->
+      <div class="flex flex-wrap items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800 gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-blue-500/15 text-blue-600 dark:text-cyan-400 rounded-xl">
+            <i data-lucide="compass" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+              Primary Flight Dynamics & Trajectory Cockpit
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Real-time 3D spatial attitude (Mahony AHRS), 9-DOF tri-axial IMU kinematics, and apogee prediction solver.
+            </p>
+          </div>
+        </div>
+
+        <!-- Cockpit Quick-Jump Sub Tabs (Matching Reference Image) -->
+        <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-space-850 p-1 rounded-xl border border-slate-200 dark:border-space-800 text-xs font-bold font-mono">
+          <button id="btn-cockpit-tab-imu" onclick="window.toggleCockpitView && window.toggleCockpitView('imu')" class="px-3 py-1 rounded-lg bg-blue-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+            <span>IMU & 3D Attitude</span>
+          </button>
+          <button id="btn-cockpit-tab-atmo" onclick="window.toggleCockpitView && window.toggleCockpitView('atmo')" class="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5 text-blue-500"></i>
+            <span>Atmospheric & Altitude</span>
+          </button>
+          <button onclick="document.querySelector('[data-section-tab=avionics]')?.click()" class="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="radio" class="w-3.5 h-3.5 text-amber-500"></i>
+            <span>RF Signal & Packets</span>
+          </button>
+          <button onclick="document.querySelector('[data-section-tab=sar]')?.click()" class="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="map" class="w-3.5 h-3.5 text-emerald-500"></i>
+            <span>GNSS Map Tracking</span>
+          </button>
+          <button onclick="document.querySelector('[data-section-tab=console]')?.click()" class="px-3 py-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1.5 cursor-pointer">
+            <i data-lucide="terminal" class="w-3.5 h-3.5 text-purple-500"></i>
+            <span>Live Packet Stream</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN COCKPIT VIEW: 3 STACKED IMU CHARTS (LEFT) + REAL-TIME 3D ATTITUDE (RIGHT) -->
+      <div id="cockpit-primary-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- =================================================================== -->
+        <!-- LEFT COLUMN: 3 STACKED REAL-TIME IMU CHARTS (7 COLS)               -->
+        <!-- 1. Accelerometer (m/s²) • 2. Gyroscope (°/s) • 3. Magnetometer (μT)  -->
+        <!-- =================================================================== -->
+        <div class="lg:col-span-7 space-y-3 flex flex-col justify-between">
+          
+          <!-- Stacked IMU Charts Panel Container -->
+          <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-3.5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+              <div class="flex items-center gap-2">
+                <div class="p-1.5 bg-blue-500/15 text-blue-600 dark:text-cyan-400 rounded-lg">
+                  <i data-lucide="activity" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                    9-DOF Inertial Dynamics & Tri-Axial Telemetry
+                  </h3>
+                  <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Real-time synchronized 10Hz inertial sensor streams</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Streaming 10Hz
+                </span>
+              </div>
+            </div>
+
+            <!-- Chart 1: Accelerometer (m/s²) -->
+            <div class="bg-slate-50 dark:bg-space-950 rounded-xl p-2.5 border border-slate-200 dark:border-space-800 shadow-inner">
+              <div class="flex items-center justify-between mb-1.5 px-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-extrabold uppercase tracking-wide text-slate-800 dark:text-slate-200 font-mono">
+                    ACCELEROMETER (m/s²)
+                  </span>
+                  <span class="text-[10px] text-slate-400 font-mono">±16g</span>
+                </div>
+                <div class="flex items-center gap-2.5 text-[11px] font-mono font-extrabold">
+                  <span class="text-rose-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-rose-500 inline-block"></span> X: <span id="imu-accel-x" class="font-bold">0.00</span></span>
+                  <span class="text-emerald-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-emerald-500 inline-block"></span> Y: <span id="imu-accel-y" class="font-bold">0.00</span></span>
+                  <span class="text-blue-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-blue-500 inline-block"></span> Z: <span id="imu-accel-z" class="font-bold">9.81</span></span>
+                </div>
+              </div>
+              <div class="relative w-full h-32 sm:h-36">
+                <canvas id="chart-accel" class="w-full h-full"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 2: Gyroscope (°/s) -->
+            <div class="bg-slate-50 dark:bg-space-950 rounded-xl p-2.5 border border-slate-200 dark:border-space-800 shadow-inner">
+              <div class="flex items-center justify-between mb-1.5 px-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-extrabold uppercase tracking-wide text-slate-800 dark:text-slate-200 font-mono">
+                    GYROSCOPE (°/s)
+                  </span>
+                  <span class="text-[10px] text-slate-400 font-mono">±2000°/s</span>
+                </div>
+                <div class="flex items-center gap-2.5 text-[11px] font-mono font-extrabold">
+                  <span class="text-rose-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-rose-500 inline-block"></span> X: <span id="imu-gyro-x" class="font-bold">0.0</span></span>
+                  <span class="text-emerald-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-emerald-500 inline-block"></span> Y: <span id="imu-gyro-y" class="font-bold">0.0</span></span>
+                  <span class="text-blue-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-blue-500 inline-block"></span> Z: <span id="imu-gyro-z" class="font-bold">0.0</span></span>
+                </div>
+              </div>
+              <div class="relative w-full h-32 sm:h-36">
+                <canvas id="chart-gyro" class="w-full h-full"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 3: Magnetometer (μT) -->
+            <div class="bg-slate-50 dark:bg-space-950 rounded-xl p-2.5 border border-slate-200 dark:border-space-800 shadow-inner">
+              <div class="flex items-center justify-between mb-1.5 px-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-extrabold uppercase tracking-wide text-slate-800 dark:text-slate-200 font-mono">
+                    MAGNETOMETER (μT)
+                  </span>
+                  <span class="text-[10px] text-slate-400 font-mono">Geomagnetic</span>
+                </div>
+                <div class="flex items-center gap-2.5 text-[11px] font-mono font-extrabold">
+                  <span class="text-rose-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-rose-500 inline-block"></span> X: <span id="imu-mag-x" class="font-bold">18.5</span></span>
+                  <span class="text-emerald-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-emerald-500 inline-block"></span> Y: <span id="imu-mag-y" class="font-bold">-6.2</span></span>
+                  <span class="text-blue-500 flex items-center gap-1"><span class="w-2.5 h-1 rounded-sm bg-blue-500 inline-block"></span> Z: <span id="imu-mag-z" class="font-bold">42.1</span></span>
+                </div>
+              </div>
+              <div class="relative w-full h-32 sm:h-36">
+                <canvas id="chart-mag" class="w-full h-full"></canvas>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- RIGHT COLUMN: REAL-TIME 3D ATTITUDE (MAHONY AHRS) (5 COLS)         -->
+        <!-- Isometric Coordinate Cage [-3 to +3] + Multi-Color CanSat Model    -->
+        <!-- =================================================================== -->
+        <div class="lg:col-span-5 space-y-3 flex flex-col justify-between">
+          
+          <!-- 3D Spatial Attitude Card -->
+          <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between flex-1">
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-space-800">
+              <div class="flex items-center gap-2">
+                <i data-lucide="box" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+                <div>
+                  <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                    Real-Time 3D Attitude (Mahony AHRS)
+                  </h3>
+                  <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Coordinate Cage [-3, 3] • Faceted Multi-Color Bus</span>
+                </div>
+              </div>
+              <button id="btn-reset-attitude" class="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-space-700 transition-colors flex items-center gap-1 cursor-pointer" title="Level and reset 3D camera orientation">
+                <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                <span>Reset View</span>
+              </button>
+            </div>
+
+            <!-- 3D Canvas Box with Coordinate Cage -->
+            <div class="relative w-full aspect-[4/3] max-h-[440px] bg-slate-900 dark:bg-space-950 rounded-xl overflow-hidden border border-slate-200 dark:border-space-800 shadow-inner group mx-auto">
+              <canvas id="attitude-canvas" width="500" height="420" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+              
+              <!-- Subtle Reticle Overlay -->
+              <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div class="w-16 h-16 border border-white/10 rounded-full flex items-center justify-center">
+                  <div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div>
+                </div>
+                <div class="absolute w-28 h-px bg-white/15"></div>
+                <div class="absolute h-28 w-px bg-white/15"></div>
+              </div>
+
+              <!-- Top Floating Legend: Axes & AHRS Status -->
+              <div class="absolute left-2.5 top-2.5 bg-space-950/85 backdrop-blur-xs text-slate-300 px-2.5 py-1 rounded-lg text-[10px] font-mono border border-white/10 pointer-events-none shadow-sm flex items-center gap-2">
+                <span class="text-rose-400 font-bold">X (North)</span>
+                <span class="text-slate-600">|</span>
+                <span class="text-emerald-400 font-bold">Y (East)</span>
+                <span class="text-slate-600">|</span>
+                <span class="text-blue-400 font-bold">Z (Up)</span>
+              </div>
+
+              <!-- Orbit Controls Guide Badge (Top Right) -->
+              <div class="absolute right-2.5 top-2.5 bg-space-950/85 backdrop-blur-xs text-slate-400 px-2 py-0.5 rounded text-[9px] font-mono border border-white/10 pointer-events-none hidden sm:block">
+                Drag to Orbit • Wheel to Zoom
+              </div>
+
+              <!-- Attitude Numerical Readouts Floating HUD (Bottom) -->
+              <div class="absolute bottom-2.5 inset-x-2.5 bg-white/95 dark:bg-space-900/95 backdrop-blur-md rounded-xl p-2.5 border border-slate-300 dark:border-space-700 shadow-xl flex items-center justify-around pointer-events-auto">
+                <div class="text-center">
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-mono">Roll (φ)</span>
+                  <span id="roll-val" class="font-mono text-base font-black text-rose-500 dark:text-rose-400">0.0°</span>
+                </div>
+                <div class="h-6 w-px bg-slate-200 dark:bg-space-800"></div>
+                <div class="text-center">
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-mono">Pitch (θ)</span>
+                  <span id="pitch-val" class="font-mono text-base font-black text-emerald-600 dark:text-emerald-400">0.0°</span>
+                </div>
+                <div class="h-6 w-px bg-slate-200 dark:bg-space-800"></div>
+                <div class="text-center">
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-mono">Yaw (Azimuth)</span>
+                  <span id="yaw-val" class="font-mono text-base font-black text-blue-600 dark:text-cyan-400">0.0°</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Apogee Prediction Engine Card (Integrated in Right Column) -->
+            <div id="apogee-predictor" class="bg-slate-50 dark:bg-space-850 rounded-xl border border-slate-200 dark:border-space-800 p-3 mt-3 shadow-xs">
+              <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-200 dark:border-space-800">
+                <div class="flex items-center gap-1.5">
+                  <i data-lucide="target" class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400"></i>
+                  <h4 class="text-[11px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                    Apogee Predictor & Ascent Kinematics
+                  </h4>
+                </div>
+                <span id="apogee-status-tag" class="px-2 py-0.2 text-[9px] font-mono font-bold bg-purple-500/15 text-purple-700 dark:text-purple-300 rounded border border-purple-500/30">
+                  SOLVER: STANDBY
+                </span>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                <div>
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-sans">Predicted Apogee</span>
+                  <span id="apogee-predicted-alt" class="text-base font-black text-purple-600 dark:text-purple-400 mt-0.5 block">-- m</span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-sans">Ascent Rate</span>
+                  <span id="apogee-ascent-rate" class="text-base font-black text-slate-800 dark:text-slate-200 mt-0.5 block">-- m/s</span>
+                </div>
+                <div>
+                  <span class="text-[9px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-sans">Time to Apogee</span>
+                  <span id="apogee-tta" class="text-base font-black text-blue-600 dark:text-cyan-400 mt-0.5 block">-- s</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- COLLAPSIBLE / ALTERNATE VIEW: ATMOSPHERIC PRESSURE & ALTITUDE PROFILES -->
+      <div id="cockpit-atmo-grid" class="hidden grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- Altitude Trajectory Profile Live Chart -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between pb-2 mb-1 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 bg-blue-500/15 text-blue-600 dark:text-cyan-400 rounded-lg">
+                <i data-lucide="trending-up" class="w-4 h-4"></i>
+              </div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                Altitude Profile & Flight Trajectory
+              </h3>
+            </div>
+            <span class="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live 10Hz
+            </span>
+          </div>
+          <div class="relative w-full h-56 min-h-[200px]">
+            <canvas id="altitude-chart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <!-- Atmospheric Pressure & Temperature Dual Chart -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between pb-2 mb-1 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-lg">
+                <i data-lucide="thermometer" class="w-4 h-4"></i>
+              </div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                Atmospheric Profile (Baro BMP585 & Temp)
+              </h3>
+            </div>
+            <div class="flex items-center gap-2 text-[10px] font-mono font-bold">
+              <span class="text-blue-600 dark:text-cyan-400">■ <span id="pressure-value">1013.25</span> hPa</span>
+              <span class="text-amber-600 dark:text-amber-400">■ <span id="temp-value">24.5</span> °C</span>
+            </div>
+          </div>
+          <div class="relative w-full h-56 min-h-[200px]">
+            <canvas id="env-chart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 2: WHOLE DEDICATED OPTICAL CAMERA & COMPUTER VISION SECTION     -->
+    <!-- ======================================================================= -->
+    <section id="section-camera" class="workspace-section space-y-4">
+      
+      <!-- Section Header -->
+      <div class="flex flex-wrap items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800 gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-blue-500/15 text-blue-600 dark:text-cyan-400 rounded-xl">
+            <i data-lucide="video" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+                Payload Optical Vision & Video Downlink
+              </h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/15 text-blue-600 dark:text-cyan-400 border border-blue-500/30">
+                WHOLE DEDICATED SUITE
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Downlink video feed • Omnivision OV2640 / OV5640 5MP CMOS • Real-time aerospace HUD telemetry overlay & frame recording.
+            </p>
+          </div>
+        </div>
+
+        <!-- Video Feed Source Selection -->
+        <div class="flex items-center gap-1.5 bg-slate-50 dark:bg-space-850 p-1 rounded-xl border border-slate-200 dark:border-space-800">
+          <button id="cam-source-sim" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-xs transition-all flex items-center gap-1">
+            <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+            <span>Simulated Aerial Feed</span>
+          </button>
+          <button id="cam-source-webcam" class="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1">
+            <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+            <span>Local Webcam</span>
+          </button>
+          <button id="cam-source-stream" class="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-space-700 transition-all flex items-center gap-1">
+            <i data-lucide="wifi" class="w-3.5 h-3.5"></i>
+            <span>IP / ESP32-CAM Stream</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Camera Deck Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Center/Left: Large Cinematic Optical Viewport (8 cols) -->
+        <div class="lg:col-span-8 bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between">
+          
+          <!-- Viewport Bar -->
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono font-bold text-slate-800 dark:text-slate-200" id="cam-status-label">
+                CAMERA STANDBY · SELECT A SOURCE
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="cam-timestamp" class="font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                TS: 00:00:00.000
+              </span>
+            </div>
+          </div>
+
+          <!-- Widescreen Cinematic Viewport Container (16:9) -->
+          <div id="cam-viewport" class="relative w-full aspect-video bg-slate-950 rounded-xl overflow-hidden border-2 border-slate-300 dark:border-space-800 shadow-2xl flex items-center justify-center group">
+            
+            <!-- 1. HTML5 Canvas for Simulated Flight Camera / Processed Feed -->
+            <canvas id="cam-canvas-viewport" width="640" height="360" class="w-full h-full object-cover block"></canvas>
+            
+            <!-- 2. HTML5 Video Element for Local Device Webcam Feed -->
+            <video id="cam-webcam-video" autoplay playsinline muted class="hidden absolute inset-0 w-full h-full object-cover"></video>
+            
+            <!-- 3. Fallback Static Image Preview Element -->
+            <img id="cam-live-image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360' viewBox='0 0 640 360'%3E%3Crect width='640' height='360' fill='%230f172a'/%3E%3Ctext x='320' y='180' fill='%2338bdf8' font-family='Noto Sans, sans-serif' font-weight='bold' font-size='14' text-anchor='middle'%3EOV2640 CAMERA READY%3C/text%3E%3C/svg%3E" alt="Camera Preview" class="hidden absolute inset-0 w-full h-full object-cover"/>
+
+            <!-- 4. Scanlines Overlay Filter -->
+            <div id="cam-scanline-overlay" class="absolute inset-0 camera-scanlines pointer-events-none opacity-40"></div>
+
+            <!-- 5. Shutter White Flash Effect Overlay -->
+            <div id="cam-flash-overlay" class="absolute inset-0 bg-white opacity-0 pointer-events-none"></div>
+
+            <!-- 6. Real-Time Aerospace Telemetry HUD Overlay -->
+            <div class="absolute inset-0 pointer-events-none p-3.5 flex flex-col justify-between text-cyan-400 font-mono text-[11px] select-none">
+              
+              <!-- HUD Top Bar -->
+              <div class="flex items-start justify-between">
+                <!-- Top-Left: Flight ID & Status -->
+                <div class="bg-black/60 backdrop-blur-xs px-2.5 py-1.5 rounded-lg border border-cyan-500/30 space-y-0.5">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white tracking-wider">CAN7USAT</span>
+                    <span id="cam-hud-phase" class="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 font-bold text-[9px] border border-emerald-400/40">
+                      PRE-FLIGHT
+                    </span>
+                  </div>
+                  <div>ALT: <span id="cam-hud-alt" class="font-black text-white text-xs">--</span> m AGL • VZ: <span id="cam-hud-vz" class="font-bold text-emerald-300">--</span> m/s</div>
+                </div>
+
+                <!-- Top-Right: GNSS Coordinates & Battery -->
+                <div class="bg-black/60 backdrop-blur-xs px-2.5 py-1.5 rounded-lg border border-cyan-500/30 text-right space-y-0.5">
+                  <div>LAT: <span id="cam-hud-lat" class="text-white">--</span></div>
+                  <div>LON: <span id="cam-hud-lon" class="text-white">--</span></div>
+                  <div>BAT: <span id="cam-hud-bat" class="font-bold text-emerald-300">-- V</span> • SVs: <span id="cam-hud-sats">0</span></div>
+                </div>
+              </div>
+
+              <!-- HUD Center: Pitch & Roll Crosshair Reticle -->
+              <div class="self-center flex items-center justify-center relative">
+                <div class="w-20 h-20 border border-cyan-400/40 rounded-full flex items-center justify-center">
+                  <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+                </div>
+                <!-- Artificial Horizon Line that tilts with actual Roll -->
+                <div id="cam-hud-horizon" class="absolute w-44 h-0.5 bg-cyan-400/60 transition-transform duration-75"></div>
+                <div class="absolute h-24 w-px bg-cyan-400/30"></div>
+              </div>
+
+              <!-- HUD Bottom Bar -->
+              <div class="flex items-end justify-between">
+                <div class="bg-black/60 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-cyan-500/30 flex items-center gap-2">
+                  <span>SENSOR: <strong class="text-white">OV2640 5MP</strong></span>
+                  <span>RES: <strong class="text-white" id="cam-hud-res">640x360</strong></span>
+                  <span>FPS: <strong class="text-emerald-300" id="cam-hud-fps">10.0</strong></span>
+                </div>
+                <div class="bg-black/60 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-cyan-500/30">
+                  <span id="cam-hud-utc" class="text-white font-bold">UTC: 00:00:00.000</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Bottom Viewport Info -->
+          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 font-mono">
+            <span>Downlink Protocol: LoRa SSTV / WiFi Bridge</span>
+            <span id="cam-frame-stats">Frames Rendered: 0 • Buffer: 100% Nominal</span>
+          </div>
+
+        </div>
+
+        <!-- Right: Camera Controls Deck & Optical Telemetry (4 cols) -->
+        <div class="lg:col-span-4 space-y-4 flex flex-col justify-between">
+          
+          <!-- Command Controls Card -->
+          <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm space-y-3.5">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+              <div class="flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                  Optical Downlink Controls
+                </h3>
+              </div>
+              <span class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">MANUAL / AUTO</span>
+            </div>
+
+            <!-- Primary Action Buttons -->
+            <div class="grid grid-cols-2 gap-2">
+              <!-- Capture Frame Button -->
+              <button id="cam-snapshot-btn" class="py-2.5 px-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all">
+                <i data-lucide="camera" class="w-4 h-4"></i>
+                <span>Capture Frame</span>
+              </button>
+
+              <!-- Video Recording Button -->
+              <button id="cam-record-btn" class="py-2.5 px-3 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-600/20 flex items-center justify-center gap-2 transition-all">
+                <i data-lucide="disc" class="w-4 h-4"></i>
+                <span id="cam-record-label">Record Clip</span>
+              </button>
+            </div>
+
+            <!-- Spectral Filter Modes -->
+            <div>
+              <label class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block mb-1">
+                Optical Spectral Filter / Vision Mode
+              </label>
+              <select id="cam-filter-select" class="w-full bg-slate-50 dark:bg-space-950 border border-slate-300 dark:border-space-800 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer">
+                <option value="normal" selected>Normal Truecolor (RGB)</option>
+                <option value="thermal">Thermal Infrared FLIR (False Color)</option>
+                <option value="nightvision">Night Vision (Emerald Phosphor)</option>
+                <option value="edgedetect">Edge Detection / Computer Vision</option>
+                <option value="scanlines">Reconnaissance CRT Scanlines</option>
+              </select>
+            </div>
+
+            <!-- Digital Zoom Buttons -->
+            <div>
+              <label class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block mb-1">
+                Digital Zoom Magnification
+              </label>
+              <div class="grid grid-cols-3 gap-2">
+                <button id="cam-zoom-1x" class="py-1 rounded-lg text-xs font-bold bg-blue-600 text-white border border-blue-500 transition-all">1.0x (Wide)</button>
+                <button id="cam-zoom-2x" class="py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-space-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-space-700 transition-all">2.0x</button>
+                <button id="cam-zoom-4x" class="py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-space-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-space-700 transition-all">4.0x (Tele)</button>
+              </div>
+            </div>
+
+            <!-- Auto Shutter Cadence -->
+            <div>
+              <label class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block mb-1">
+                Auto-Interval Shutter Cadence
+              </label>
+              <select id="cam-interval-select" class="w-full bg-slate-50 dark:bg-space-950 border border-slate-300 dark:border-space-800 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer">
+                <option value="0" selected>Manual Shutter (Click to Capture)</option>
+                <option value="1">Every 1 Second (High Speed)</option>
+                <option value="2">Every 2 Seconds (Nominal Ascent)</option>
+                <option value="5">Every 5 Seconds (Survey Cadence)</option>
+                <option value="10">Every 10 Seconds (Power Saving)</option>
+              </select>
+            </div>
+
+          </div>
+
+          <!-- Optical Subsystem Diagnostics Card -->
+          <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm space-y-2">
+            <div class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-space-800 pb-1.5 flex justify-between">
+              <span>Optics Hardware Telemetry</span>
+              <span class="text-emerald-600 font-bold">INA226 OK</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div class="bg-slate-50 dark:bg-space-850 p-2 rounded-lg border border-slate-200 dark:border-space-800">
+                <span class="text-[9px] text-slate-500 block uppercase font-sans">Lens Optics</span>
+                <span class="font-bold text-slate-800 dark:text-slate-200">FOV 68° F/2.0</span>
+              </div>
+              <div class="bg-slate-50 dark:bg-space-850 p-2 rounded-lg border border-slate-200 dark:border-space-800">
+                <span class="text-[9px] text-slate-500 block uppercase font-sans">Bitrate / Bandwidth</span>
+                <span class="font-bold text-blue-600 dark:text-cyan-400">128 kbps (LoRa)</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Bottom: Captured Frames Gallery & Filmstrip -->
+      <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+          <div class="flex items-center gap-2">
+            <i data-lucide="images" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+            <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+              Captured Optical Frames Gallery (<span id="cam-gallery-count">0</span> Photos)
+            </h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="cam-gallery-clear" class="px-2.5 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors">
+              Clear Gallery
+            </button>
+          </div>
+        </div>
+
+        <!-- Horizontal Filmstrip of Frames -->
+        <div id="cam-gallery-container" class="flex items-center gap-3 overflow-x-auto py-2 min-h-[110px]">
+          <div class="text-xs text-slate-400 dark:text-slate-500 italic p-3 text-center w-full">
+            No frames captured yet. Click <strong>"Capture Frame"</strong> above or engage Auto-Capture to record flight imagery.
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 3: SEARCH & RECOVERY (SAR) GEOSPATIAL RADAR                     -->
+    <!-- ======================================================================= -->
+    <section id="section-sar" class="workspace-section space-y-4">
+      
+      <!-- Section Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-xl">
+            <i data-lucide="map" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+              Search & Recovery (SAR) Geospatial Tracking
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              High-precision OpenStreetMap CanSat recovery track, real-time azimuth bearing cone, distance range and geodetic fix.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">SECTION 3</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Expanded Leaflet Map Box (8 cols) -->
+        <div class="lg:col-span-8 bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 flex flex-col shadow-sm">
+          
+          <!-- Map Toolbar -->
+          <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <i data-lucide="navigation" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+              <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                CanSat Trajectory & Ground Footprint
+              </h3>
+            </div>
+            
+            <div class="flex items-center gap-1.5">
+              <button id="btn-recenter-map" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded text-xs font-bold border border-slate-300 dark:border-space-700 transition-all flex items-center gap-1" title="Lock and recenter on CanSat">
+                <i data-lucide="crosshair" class="w-3 h-3 text-blue-600 dark:text-cyan-400"></i>
+                <span>CanSat</span>
+              </button>
+              <button id="btn-copy-coords" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded text-xs font-bold border border-slate-300 dark:border-space-700 transition-all flex items-center gap-1" title="Copy GPS Coordinates for field crew phone maps">
+                <i data-lucide="copy" class="w-3 h-3 text-emerald-600 dark:text-emerald-400"></i>
+                <span>Copy Coords</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Leaflet Map Container (Generous Height) -->
+          <div class="relative w-full h-[460px] rounded-xl overflow-hidden border border-slate-200 dark:border-space-800 shadow-inner z-0">
+            <div id="map-container" class="w-full h-full"></div>
+            
+            <!-- Map Overlay Legend & Recovery HUD -->
+            <div class="absolute bottom-3 left-3 z-[400] bg-white/95 dark:bg-space-950/90 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-space-700 text-[11px] font-mono font-bold shadow-xl space-y-1.5">
+              <div class="flex items-center gap-2 text-blue-600 dark:text-cyan-400">
+                <span class="w-2.5 h-2.5 rounded-full bg-blue-600 dark:bg-cyan-500 border border-white"></span>
+                <span>CanSat Live Descent</span>
+              </div>
+              <div class="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white"></span>
+                <span>Base Station (GCS)</span>
+              </div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-space-800">
+                Bearing: <span id="map-bearing-val" class="text-slate-900 dark:text-white font-black">042° NE</span> • Slant Range: <span id="map-range-val" class="text-blue-600 dark:text-cyan-400 font-black">245m</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: GNSS Geodetic Coordinates & Field Search Card (4 cols) -->
+        <div class="lg:col-span-4 bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 flex flex-col justify-between shadow-sm space-y-4">
+          
+          <div>
+            <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-space-800">
+              <div class="flex items-center gap-2">
+                <i data-lucide="satellite" class="w-4 h-4 text-emerald-600 dark:text-emerald-400"></i>
+                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                  GNSS Geodetic Navigation Fix
+                </h3>
+              </div>
+              <div class="flex items-center gap-1.5 font-mono text-[10px]">
+                <span class="text-slate-500 dark:text-slate-400">HDOP:</span>
+                <span id="hdop-value" class="font-bold text-slate-500 dark:text-slate-400">--</span>
+              </div>
+            </div>
+
+            <!-- Geodetic Coordinates Readout -->
+            <div class="bg-slate-50 dark:bg-space-850 border border-slate-200 dark:border-space-800 rounded-xl p-3.5 font-mono text-xs space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-500 dark:text-slate-400">Latitude:</span>
+                <span id="lat-value" class="font-black text-slate-500 dark:text-slate-400 text-sm">--</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-500 dark:text-slate-400">Longitude:</span>
+                <span id="lon-value" class="font-black text-slate-500 dark:text-slate-400 text-sm">--</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-500 dark:text-slate-400">GPS MSL Altitude:</span>
+                <span id="gps-alt-value" class="font-black text-slate-500 dark:text-slate-400">--</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-500 dark:text-slate-400">GNSS Status:</span>
+                <span class="text-slate-500 dark:text-slate-400 font-bold">See solution badge above</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SAR Field Instructions & External Links -->
+          <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-space-800">
+            <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 block font-sans">
+              Field Recovery Tools
+            </span>
+            
+            <a id="gmaps-recovery-link" href="https://maps.google.com" target="_blank" rel="noopener noreferrer" class="w-full py-2 bg-blue-50 hover:bg-blue-100 dark:bg-space-850 dark:hover:bg-space-800 border border-blue-200 dark:border-space-700 text-blue-700 dark:text-cyan-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all">
+              <i data-lucide="external-link" class="w-4 h-4 text-blue-600 dark:text-cyan-400"></i>
+              <span>Open in Google Maps (SAR Route)</span>
+            </a>
+
+            <!-- Locator Buzzer Trigger -->
+            <button onclick="window.triggerCommand && window.triggerCommand('BUZZER_ON', 'Activate audible locator buzzer for field recovery.')" class="w-full py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all">
+              <i data-lucide="bell" class="w-4 h-4"></i>
+              <span>Activate Acoustic Recovery Buzzer</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 4: AVIONICS, POWER & INERTIAL HEALTH                            -->
+    <!-- ======================================================================= -->
+    <section id="section-avionics" class="workspace-section space-y-4">
+      
+      <!-- Section Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-xl">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+              Avionics Power & Kinematic Telemetry Health
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              INA226 electrical bus monitoring, 2S LiPo battery pack state of charge, tri-axial accelerometer bars and RF LoRa link margin.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">SECTION 4</span>
+        </div>
+      </div>
+
+      <!-- Low Voltage Warning Banner -->
+      <div id="low-voltage-alert" class="hidden p-3 bg-rose-500/15 border-2 border-rose-500 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold flex items-center justify-between animate-pulse">
+        <div class="flex items-center gap-2">
+          <i data-lucide="battery-warning" class="w-5 h-5 text-rose-600 dark:text-rose-400 stroke-[2.5]"></i>
+          <span><strong>CRITICAL LOW VOLTAGE:</strong> Pack under safety floor (&lt;6.8V). Emergency payload shutdown imminent!</span>
+        </div>
+        <span class="font-mono text-xs font-black bg-rose-500/30 px-2 py-0.5 rounded text-rose-800 dark:text-rose-200">UNDERVOLT</span>
+      </div>
+
+      <!-- Subsystems Cards Grid (Spacious 3-Column Layout) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- Card 1: Power Subsystem & Battery Radial Gauge -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col items-center justify-between">
+          <div class="w-full flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-space-800 pb-2">
+            <span>2S LiPo Battery Pack</span>
+            <span id="battery-health-status" class="text-slate-500 dark:text-slate-400 font-bold">NO DATA</span>
+          </div>
+
+          <!-- SVG Radial Gauge -->
+          <div class="relative w-36 h-36 my-3 flex items-center justify-center">
+            <svg class="w-full h-full" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" fill="transparent" stroke="#e2e8f0" class="stroke-slate-200 dark:stroke-space-800" stroke-width="8"/>
+              <circle id="voltage-ring" class="ring-progress" cx="50" cy="50" r="40" fill="transparent" stroke="#94a3b8" stroke-width="8" stroke-dasharray="251.32" stroke-dashoffset="251.32" stroke-linecap="round"/>
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+              <span id="voltage-value-avionics" class="font-mono text-2xl font-black text-slate-500 dark:text-slate-400 leading-tight">--</span>
+              <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">Volts</span>
+            </div>
+          </div>
+
+          <!-- Current, Power & Bus Metrics -->
+          <div class="w-full grid grid-cols-3 gap-1 pt-2 border-t border-slate-200 dark:border-space-800 text-center font-mono">
+            <div>
+              <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block font-sans">Current</span>
+              <span id="current-value" class="text-xs font-black text-slate-500 dark:text-slate-400">-- mA</span>
+            </div>
+            <div>
+              <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block font-sans">Power</span>
+              <span id="power-value" class="text-xs font-black text-slate-500 dark:text-slate-400">-- W</span>
+            </div>
+            <div>
+              <span class="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase block font-sans">Bus V</span>
+              <span id="bus-voltage" class="text-xs font-black text-slate-500 dark:text-slate-400">-- V</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Inertial Kinematics & Tri-Axial G-Load Bars -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+            <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">Inertial Dynamics</span>
+            <span class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">±16g Range</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 my-2">
+            <div class="bg-slate-50 dark:bg-space-850 p-2.5 rounded-xl text-center border border-slate-200 dark:border-space-800">
+              <span class="text-[9px] font-bold text-slate-500 uppercase block">Roll Spin Rate</span>
+              <span id="rot-vel" class="font-mono text-lg font-black text-purple-600 dark:text-purple-400">0.0 °/s</span>
+            </div>
+            <div class="bg-slate-50 dark:bg-space-850 p-2.5 rounded-xl text-center border border-slate-200 dark:border-space-800">
+              <span class="text-[9px] font-bold text-slate-500 uppercase block">Packets Ingested</span>
+              <span id="packet-count" class="font-mono text-lg font-black text-blue-600 dark:text-cyan-400">0 pkts</span>
+            </div>
+          </div>
+
+          <!-- Ax, Ay, Az Bars -->
+          <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span class="w-6 font-bold text-rose-500">Ax:</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-space-950 rounded-full overflow-hidden flex">
+                <div id="ax-bar" class="h-full bg-rose-500" style="width: 50%;"></div>
+              </div>
+              <span id="ax-val" class="w-14 text-right font-black text-slate-500 dark:text-slate-400">-- g</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span class="w-6 font-bold text-emerald-600">Ay:</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-space-950 rounded-full overflow-hidden flex">
+                <div id="ay-bar" class="h-full bg-emerald-500" style="width: 50%;"></div>
+              </div>
+              <span id="ay-val" class="w-14 text-right font-black text-slate-500 dark:text-slate-400">-- g</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span class="w-6 font-bold text-blue-600">Az:</span>
+              <div class="flex-1 h-2 bg-slate-200 dark:bg-space-950 rounded-full overflow-hidden flex">
+                <div id="az-bar" class="h-full bg-cyan-500" style="width: 50%;"></div>
+              </div>
+              <span id="az-val" class="w-14 text-right font-black text-slate-500 dark:text-slate-400">-- g</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: LoRa Telemetry RF Link Quality & Noise Floor -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+            <span class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">LoRa SX1278 RF Link</span>
+            <span class="text-[10px] font-mono font-bold text-emerald-600">868 MHz</span>
+          </div>
+
+          <div class="space-y-3 my-2 font-mono text-xs">
+            <div class="flex justify-between items-center p-2 bg-slate-50 dark:bg-space-850 rounded-lg border border-slate-200 dark:border-space-800">
+              <span class="text-slate-500">RSSI Power:</span>
+              <span id="rssi-val-text-avionics" class="font-black text-slate-500 text-sm">-- dBm</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-slate-50 dark:bg-space-850 rounded-lg border border-slate-200 dark:border-space-800">
+              <span class="text-slate-500">Signal-to-Noise:</span>
+              <span id="snr-value-avionics" class="font-black text-slate-500 text-sm">-- dB</span>
+            </div>
+            <div class="flex justify-between items-center p-2 bg-slate-50 dark:bg-space-850 rounded-lg border border-slate-200 dark:border-space-800">
+              <span class="text-slate-500">Packet Loss Rate:</span>
+              <span id="packet-loss-avionics" class="font-black text-slate-500 text-sm">-- loss</span>
+            </div>
+          </div>
+
+          <div class="text-[10px] text-slate-500 pt-2 border-t border-slate-200 dark:border-space-800 font-mono">
+            Antenna alignment: <strong>Not verified</strong>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 5: OPERATIONS CONSOLE & TELECOMMAND UPLINK DECK                 -->
+    <!-- ======================================================================= -->
+    <section id="section-console" class="workspace-section space-y-4">
+      
+      <!-- Section Header -->
+      <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-purple-500/15 text-purple-600 dark:text-purple-400 rounded-xl">
+            <i data-lucide="terminal" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+              Flight Operations Console & Telecommand Uplink Deck
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Mission director terminal stream, manual timestamped flight note logger, and two-stage guarded pyrotechnic telecommand uplink.
+            </p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">SECTION 5</span>
+        </div>
+      </div>
+
+      <!-- Operations Console Grid -->
+      <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 space-y-3.5 shadow-sm">
+        
+        <!-- Header & Filter Actions -->
+        <div class="flex flex-wrap items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800 gap-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="activity" class="w-4 h-4 text-slate-600 dark:text-slate-400"></i>
+            <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+              Real-Time Event Stream
+            </h3>
+          </div>
+          
+          <div class="flex items-center gap-1.5">
+            <button id="btn-csv" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-space-700 flex items-center gap-1 transition-all" title="Download Raw Telemetry as CSV">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400"></i>
+              <span>Export CSV</span>
+            </button>
+            <button id="btn-kml" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-space-700 flex items-center gap-1 transition-all" title="Export 3D Trajectory to Google Earth KML">
+              <i data-lucide="globe" class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"></i>
+              <span>Export KML</span>
+            </button>
+            <button id="btn-clear" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-bold border border-slate-300 dark:border-space-700 flex items-center gap-1 transition-all" title="Clear Event Log Buffer">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              <span>Clear Log</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Terminal Event Stream (Scrollable window) -->
+        <div id="event-log" class="h-56 overflow-y-auto bg-slate-950 text-slate-200 p-3 rounded-xl font-mono text-[11px] space-y-1 border border-slate-300 dark:border-space-800 shadow-inner">
+          <div class="text-cyan-400">[00:00:00.000] [SYSTEM ] IN-SPACe Ground Control Station initialized. Ready for link.</div>
+          <div class="text-emerald-400">[00:00:00.050] [SUCCESS] Sensor calibration profiles loaded. Baseline QNH 1013.25 hPa.</div>
+          <div class="text-purple-400">[00:00:00.100] [DATA   ] 3D Attitude matrix zeroed. Awaiting telemetry stream...</div>
+          <div class="text-amber-400">[00:00:00.120] [WARNING] GNSS searching constellations. Awaiting 3D lock...</div>
+        </div>
+
+        <!-- Human Operator Note Logger Input -->
+        <div class="flex items-center gap-2 pt-1">
+          <input type="text" id="operator-note-input" placeholder="Type flight observation or team note..." class="flex-1 bg-slate-50 dark:bg-space-950 border border-slate-300 dark:border-space-800 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 font-mono focus:outline-none focus:border-blue-500 placeholder-slate-400 dark:placeholder-slate-500"/>
+          <button id="btn-add-note" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-300 dark:border-space-700 flex items-center gap-1 transition-colors">
+            <i data-lucide="message-square" class="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400"></i>
+            <span>Log Note</span>
+          </button>
+        </div>
+
+        <!-- Guarded Command Uplink Deck -->
+        <div class="pt-2 border-t border-slate-200 dark:border-space-800">
+          <div class="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 mb-2">
+            <span>Critical Telecommand Uplink Deck</span>
+            <span class="text-rose-600 dark:text-rose-400 font-bold">SAFETY INTERLOCK ACTIVE</span>
+          </div>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            <button onclick="window.triggerCommand && window.triggerCommand('PING', 'Test RF uplink and payload transceiver handshake.')" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-space-850 dark:hover:bg-space-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-300 dark:border-space-700 text-center transition-all">
+              CMD: PING
+            </button>
+            <button onclick="window.triggerCommand && window.triggerCommand('CAL_PRESSURE', 'Tare launch pad elevation & zero BMP585 AGL altitude.')" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-space-850 dark:hover:bg-space-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-300 dark:border-space-700 text-center transition-all">
+              TARE ALT
+            </button>
+            <button onclick="window.triggerCommand && window.triggerCommand('BUZZER_ON', 'Activate audible locator buzzer for field recovery.')" class="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold rounded-xl border border-amber-300 dark:border-amber-500/30 text-center transition-all">
+              BUZZER
+            </button>
+            <button onclick="window.triggerCommand && window.triggerCommand('DEPLOY_MAIN', 'MANUAL OVERRIDE: Fire main parachute canopy ejection.')" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 text-xs font-black rounded-xl border border-rose-300 dark:border-rose-500/30 text-center transition-all">
+              MAIN CHUTE
+            </button>
+            <button onclick="window.triggerCommand && window.triggerCommand('CAM_SNAP', 'Command OV2640 payload camera to snapshot and buffer.')" class="px-2.5 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-cyan-300 text-xs font-bold rounded-xl border border-blue-300 dark:border-blue-500/30 text-center transition-all">
+              CAM SNAP
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- SECTION 6: TESTING, BUFFER & TRANSMISSION BENCHMARKS                   -->
+    <!-- ======================================================================= -->
+    <section id="section-testing" class="workspace-section space-y-4">
+      
+      <!-- Section Header -->
+      <div class="flex flex-wrap items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800 gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-xl">
+            <i data-lucide="gauge" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white font-display">
+                Telemetry Performance & Constraints Testing Suite
+              </h2>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                BENCHMARK & CONSTRAINTS ENGINE
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Live RingBuffer I/O speeds, serial transmission bandwidth, packet inter-arrival jitter, and automated aerospace constraints evaluation.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">SECTION 6</span>
+        </div>
+      </div>
+
+      <!-- Top KPI Row: 4 Metric Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        
+        <!-- Metric 1: RingBuffer Speed & Health -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-3.5 shadow-sm space-y-2">
+          <div class="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+            <span>RingBuffer Performance</span>
+            <span class="text-blue-600 dark:text-cyan-400 font-mono font-bold">O(1) Circular</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-1.5">
+              <span id="bench-buffer-ops" class="font-mono text-xl lg:text-2xl font-black text-blue-600 dark:text-cyan-400">-- ops/s</span>
+            </div>
+            <span id="bench-buffer-latency" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Avg push latency: -- µs</span>
+          </div>
+          <div class="space-y-1 pt-1 border-t border-slate-100 dark:border-space-800">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500">
+              <span>Capacity Fill:</span>
+              <span id="bench-buffer-fill" class="font-bold text-slate-700 dark:text-slate-300">0 / 36,000 (0.0%)</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 dark:bg-space-800 rounded-full overflow-hidden">
+              <div id="bench-buffer-bar" class="h-full bg-blue-600 transition-all duration-300" style="width: 0%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span>Est Memory:</span>
+              <span id="bench-buffer-ram" class="font-bold">0.0 KB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric 2: Transmission Speed & Bandwidth -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-3.5 shadow-sm space-y-2">
+          <div class="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+            <span>Transmission Speed</span>
+            <span id="bench-link-type" class="text-emerald-600 dark:text-emerald-400 font-mono font-bold">115200 BAUD</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-1.5">
+              <span id="bench-packet-rate" class="font-mono text-xl lg:text-2xl font-black text-emerald-600 dark:text-emerald-400">-- Hz</span>
+              <span class="text-xs font-mono font-bold text-slate-500">packet rate</span>
+            </div>
+            <span id="bench-throughput" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Throughput: 0.00 KB/s</span>
+          </div>
+          <div class="space-y-1 pt-1 border-t border-slate-100 dark:border-space-800">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500">
+              <span>Baud Utilization:</span>
+              <span id="bench-baud-util" class="font-bold text-slate-700 dark:text-slate-300">0.0% of 115200</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 dark:bg-space-800 rounded-full overflow-hidden">
+              <div id="bench-baud-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span>Port Link:</span>
+              <span id="bench-port-status" class="font-bold text-emerald-600">READY</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric 3: Timing Jitter & RF Link -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-3.5 shadow-sm space-y-2">
+          <div class="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+            <span>Timing Stability & Jitter</span>
+            <span class="text-purple-600 dark:text-purple-400 font-mono font-bold">&lt; 35ms Limit</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-1.5">
+              <span id="bench-jitter-ms" class="font-mono text-xl lg:text-2xl font-black text-purple-600 dark:text-purple-400">0.0 ms</span>
+              <span class="text-xs font-mono font-bold text-slate-500">jitter σ</span>
+            </div>
+            <span id="bench-packet-loss-sub" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">Packet Loss: 0.00%</span>
+          </div>
+          <div class="space-y-1 pt-1 border-t border-slate-100 dark:border-space-800">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500">
+              <span>Rolling 3s Loss:</span>
+              <span id="bench-rolling-loss" class="font-bold text-slate-700 dark:text-slate-300">0.0%</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 dark:bg-space-800 rounded-full overflow-hidden">
+              <div id="bench-jitter-bar" class="h-full bg-purple-500 transition-all duration-300" style="width: 10%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span>RF Margin:</span>
+              <span id="bench-rf-margin" class="font-bold">RSSI -65dBm • SNR +9.5dB</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric 4: Packet Format Integrity & Data Flow -->
+        <div class="bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-3.5 shadow-sm space-y-2">
+          <div class="flex items-center justify-between text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+            <span>Packet Format Integrity</span>
+            <span class="text-blue-600 dark:text-cyan-400 font-mono font-bold">CANSAT CSV</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-1.5">
+              <span id="bench-format-error-rate" class="font-mono text-xl lg:text-2xl font-black text-emerald-600 dark:text-emerald-400">0.00%</span>
+              <span class="text-xs font-mono font-bold text-slate-500">malformed</span>
+            </div>
+            <span id="bench-format-stats" class="text-[11px] font-mono text-slate-500 dark:text-slate-400">0 malformed / 0 parsed</span>
+          </div>
+          <div class="space-y-1 pt-1 border-t border-slate-100 dark:border-space-800">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500">
+              <span>Total Ingested:</span>
+              <span id="bench-total-bytes" class="font-bold text-slate-700 dark:text-slate-300">0.0 KB</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-100 dark:bg-space-800 rounded-full overflow-hidden">
+              <div class="h-full bg-amber-500" style="width: 100%;"></div>
+            </div>
+            <div class="flex justify-between text-[10px] font-mono text-slate-400">
+              <span>Fault Isolation Gate:</span>
+              <span id="bench-fault-gate" class="font-bold text-emerald-600">FORMAT CHECK ACTIVE</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Main Testing Grid: Constraints Table (Left) + Benchmark Runner (Right) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Left Column: Essential Mission Constraints Checklist (7 cols) -->
+        <div class="lg:col-span-7 bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-lg">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                  Essential Mission Constraints Evaluation Checklist
+                </h3>
+                <span class="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Real-time gatekeeper validating operational safety envelopes</span>
+              </div>
+            </div>
+            <span id="constraints-summary-badge" class="px-2.5 py-1 text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 rounded-full border border-emerald-500/30">
+              ALL GATES NOMINAL
+            </span>
+          </div>
+
+          <!-- Constraints Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead>
+                <tr class="border-b border-slate-200 dark:border-space-800 text-[10px] uppercase text-slate-500 font-extrabold tracking-wider">
+                  <th class="py-2 px-2">Constraint Gate</th>
+                  <th class="py-2 px-2">Category</th>
+                  <th class="py-2 px-2">Current Value</th>
+                  <th class="py-2 px-2">Safety Threshold</th>
+                  <th class="py-2 px-2 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody id="constraints-table-body" class="divide-y divide-slate-100 dark:divide-space-850">
+                <!-- Dynamically populated rows -->
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">Packet Loss Limit</td>
+                  <td class="py-2 px-2 text-slate-500">RF Telemetry</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">0.0%</td>
+                  <td class="py-2 px-2 text-slate-500">≤ 5.0%</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">Telemetry Rate</td>
+                  <td class="py-2 px-2 text-slate-500">Throughput</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">10.0 Hz</td>
+                  <td class="py-2 px-2 text-slate-500">≥ 8.0 Hz</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">Packet Format</td>
+                  <td class="py-2 px-2 text-slate-500">Data Format</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">0.00%</td>
+                  <td class="py-2 px-2 text-slate-500">&lt; 1.0%</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">Packet Arrival Jitter</td>
+                  <td class="py-2 px-2 text-slate-500">Timing Stability</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">3.2 ms</td>
+                  <td class="py-2 px-2 text-slate-500">&lt; 35.0 ms</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">Battery Voltage Floor</td>
+                  <td class="py-2 px-2 text-slate-500">EPS Power</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">8.24 V</td>
+                  <td class="py-2 px-2 text-slate-500">≥ 7.0 V</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">GNSS Precision HDOP</td>
+                  <td class="py-2 px-2 text-slate-500">Navigation</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">0.95 (3D)</td>
+                  <td class="py-2 px-2 text-slate-500">≤ 2.0</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+                <tr class="hover:bg-slate-50 dark:hover:bg-space-850 transition-colors">
+                  <td class="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">RingBuffer Capacity</td>
+                  <td class="py-2 px-2 text-slate-500">Memory Mgmt</td>
+                  <td class="py-2 px-2 text-blue-600 font-bold">12.4% full</td>
+                  <td class="py-2 px-2 text-slate-500">≤ 90.0%</td>
+                  <td class="py-2 px-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">PASS</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] font-mono text-slate-500 pt-2 border-t border-slate-100 dark:border-space-800">
+            <span>Automatic safety audit checks run at 2 Hz interval</span>
+            <span class="text-emerald-600 font-bold">● Green = Passing Envelope</span>
+          </div>
+        </div>
+
+        <!-- Right Column: Interactive Benchmark & Stress Test Console (5 cols) -->
+        <div class="lg:col-span-5 bg-white dark:bg-space-900 rounded-2xl border border-slate-200 dark:border-space-800 p-4 shadow-sm flex flex-col justify-between space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-space-800">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 bg-blue-500/15 text-blue-600 dark:text-cyan-400 rounded-lg">
+                <i data-lucide="play-circle" class="w-4 h-4"></i>
+              </div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 font-display">
+                Interactive Benchmarking & Stress Suite
+              </h3>
+            </div>
+            <button id="btn-download-benchmark-report" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-200 rounded-lg text-[10px] font-mono font-bold border border-slate-300 dark:border-space-700 flex items-center gap-1 transition-all" title="Export constraints and benchmark report as JSON">
+              <i data-lucide="file-text" class="w-3 h-3 text-emerald-600"></i>
+              <span>Export Audit</span>
+            </button>
+          </div>
+
+          <!-- Test Action Buttons Grid -->
+          <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+            <button id="btn-run-buffer-bench" class="p-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-cyan-300 rounded-xl border border-blue-200 dark:border-blue-800 font-bold flex flex-col items-center justify-center text-center transition-all cursor-pointer">
+              <i data-lucide="zap" class="w-4 h-4 mb-1 text-blue-600"></i>
+              <span>50k Buffer Benchmark</span>
+              <span class="text-[9px] text-blue-500 font-normal">Push & Read Throughput</span>
+            </button>
+
+            <button id="btn-run-parser-bench" class="p-2.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-xl border border-purple-200 dark:border-purple-800 font-bold flex flex-col items-center justify-center text-center transition-all cursor-pointer">
+              <i data-lucide="binary" class="w-4 h-4 mb-1 text-purple-600"></i>
+              <span>25k Parser Benchmark</span>
+              <span class="text-[9px] text-purple-500 font-normal">CANSAT Field Decode Rate</span>
+            </button>
+
+            <button id="btn-stress-burst" class="p-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-xl border border-amber-200 dark:border-amber-800 font-bold flex flex-col items-center justify-center text-center transition-all cursor-pointer">
+              <i data-lucide="flame" class="w-4 h-4 mb-1 text-amber-600"></i>
+              <span>200 Pkt Stress Burst</span>
+              <span class="text-[9px] text-amber-500 font-normal">High-Rate (200Hz) Injection</span>
+            </button>
+
+            <button id="btn-inject-malformed" class="p-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 rounded-xl border border-rose-200 dark:border-rose-800 font-bold flex flex-col items-center justify-center text-center transition-all cursor-pointer">
+              <i data-lucide="bug" class="w-4 h-4 mb-1 text-rose-600"></i>
+              <span>Inject Malformed Line</span>
+              <span class="text-[9px] text-rose-500 font-normal">Test Format Rejection</span>
+            </button>
+          </div>
+
+          <!-- Benchmark Console Log Terminal -->
+          <div class="space-y-1.5 flex-1 flex flex-col">
+            <div class="flex items-center justify-between text-[10px] font-mono font-bold text-slate-500">
+              <span>Benchmark Terminal Output:</span>
+              <button id="btn-clear-bench-log" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">Clear</button>
+            </div>
+            <div id="bench-console-log" class="h-44 overflow-y-auto bg-slate-950 text-slate-200 p-2.5 rounded-xl font-mono text-[10.5px] space-y-1 border border-slate-300 dark:border-space-800 shadow-inner flex-1">
+              <div class="text-cyan-400">[READY] Constraints and testing harness loaded.</div>
+              <div class="text-slate-400">[INFO ] RingBuffer memory capacity initialized to 36,000 slots.</div>
+              <div class="text-emerald-400">[INFO ] Click any benchmark button above to measure live throughput.</div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- 6. COMMAND CONFIRMATION MODAL (Two-Stage Safety Guard)                     -->
+  <!-- ========================================================================= -->
+  <div id="command-dialog" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-space-900 border-2 border-rose-500 rounded-2xl shadow-2xl max-w-md w-full p-6 text-center animate-in fade-in zoom-in-95 duration-150 text-slate-800 dark:text-slate-200">
+      
+      <div class="w-14 h-14 bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-full flex items-center justify-center mx-auto mb-3.5 border border-rose-300 dark:border-rose-500/40">
+        <i data-lucide="alert-octagon" class="w-8 h-8 stroke-[2.2]"></i>
+      </div>
+
+      <h3 class="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight font-display">Confirm Uplink Command</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">This telecommand transmits directly to the CanSat onboard flight computer.</p>
+
+      <!-- Command Identifier Card -->
+      <div class="my-4 p-3.5 bg-slate-50 dark:bg-space-950 border border-slate-200 dark:border-space-800 rounded-xl text-left">
+        <div class="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 font-sans">Command Identifier:</div>
+        <div id="cmd-dialog-name" class="font-mono text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5">CMD_NAME_PLACEHOLDER</div>
+        <div id="cmd-dialog-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1">Command description and intended flight computer action.</div>
+      </div>
+
+      <!-- Interlock Checkbox -->
+      <label class="flex items-center justify-center gap-2.5 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl cursor-pointer mb-5">
+        <input type="checkbox" id="cmd-safety-confirm" class="w-4 h-4 text-rose-600 bg-white dark:bg-space-950 border-slate-300 dark:border-space-700 rounded focus:ring-rose-500 cursor-pointer"/>
+        <span class="text-xs font-bold text-rose-700 dark:text-rose-300">I confirm the flight system is safe for actuation</span>
+      </label>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-3">
+        <button id="cmd-cancel-btn" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-space-800 dark:hover:bg-space-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs border border-slate-300 dark:border-space-700 transition-colors">
+          Abort / Cancel
+        </button>
+        <button id="cmd-confirm-btn" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl font-black text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-1.5">
+          <i data-lucide="send" class="w-3.5 h-3.5"></i>
+          <span>TRANSMIT UPLINK</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 7. KEYBOARD SHORTCUTS REFERENCE MODAL                                     -->
+  <!-- ========================================================================= -->
+  <div id="shortcuts-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-space-900 border border-slate-200 dark:border-space-800 rounded-2xl shadow-2xl max-w-md w-full p-6 text-slate-800 dark:text-slate-200">
+      
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-space-800 mb-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="command" class="w-5 h-5 text-blue-600 dark:text-cyan-400"></i>
+          <h3 class="text-base font-black text-slate-900 dark:text-white uppercase font-display">Console Keyboard Shortcuts</h3>
+        </div>
+        <button onclick="document.getElementById('shortcuts-modal').classList.add('hidden')" class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-2 font-mono text-xs">
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Focus Section Tabs</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">1 - 6, 0 (T)</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Toggle Arm / Disarm Interlock</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">Space</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Start / Stop Quick Simulator</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">S</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Test Warning Alarm Sound</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-rose-600 font-bold">W</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Open Pre-Flight Calibration</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">C</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Mute / Unmute Audio Chimes</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">M</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Capture Camera Snapshot</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">P</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 bg-slate-50 dark:bg-space-950 rounded-lg border border-slate-200 dark:border-space-800">
+          <span class="font-sans font-bold text-slate-700 dark:text-slate-300">Toggle Fullscreen Display</span>
+          <kbd class="px-2 py-0.5 bg-slate-100 dark:bg-space-800 border border-slate-300 dark:border-space-700 rounded text-blue-600 dark:text-cyan-400 font-bold">F</kbd>
+        </div>
+      </div>
+
+      <div class="pt-4 text-center">
+        <button onclick="document.getElementById('shortcuts-modal').classList.add('hidden')" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs transition-colors">
+          Close Help
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 8. EXTERNAL APPLICATION SCRIPTS                                           -->
+  <!-- ========================================================================= -->
+  <script src="telemetry-engine.js?v=2.2"></script>
+  <script src="charts-manager.js?v=2.2"></script>
+  <script src="map-manager.js?v=2.2"></script>
+  <script src="attitude-3d.js?v=2.2"></script>
+  <script src="calibration-panel.js?v=2.2"></script>
+  <script src="command-protocol.js?v=2.2"></script>
+  <script src="app.js?v=2.2"></script>
+
+  <!-- Immediate High-Precision Real-Time UTC Ticker (Guarantees millisecond refresh) -->
+  <script>
+    (function initPreciseUTC() {
+      function pad(n, len = 2) { return String(n).padStart(len, '0'); }
+      function tick() {
+        const d = new Date();
+        const h = pad(d.getUTCHours());
+        const m = pad(d.getUTCMinutes());
+        const s = pad(d.getUTCSeconds());
+        const ms = pad(d.getUTCMilliseconds(), 3);
+        const timeStr = `${h}:${m}:${s}.${ms}`;
+        const y = d.getUTCFullYear();
+        const mo = pad(d.getUTCMonth() + 1);
+        const day = pad(d.getUTCDate());
+
+        const el = document.getElementById('clock-utc');
+        if (el) {
+          if (!window._utcMode || window._utcMode === 0) {
+            el.textContent = `UTC: ${timeStr}`;
+          } else if (window._utcMode === 1) {
+            el.textContent = `${y}-${mo}-${day} ${timeStr} UTC`;
+          } else {
+            el.textContent = `UTC: ${h}:${m}:${s}`;
+          }
+          el.title = `Exact Real-Time UTC: ${y}-${mo}-${day} ${timeStr} UTC (Click to toggle format)`;
+        }
+        const hud = document.getElementById('cam-hud-utc');
+        if (hud) hud.textContent = `UTC: ${timeStr}`;
+        const ts = document.getElementById('cam-timestamp');
+        if (ts) ts.textContent = `TS: ${timeStr} UTC`;
+      }
+      tick();
+      setInterval(tick, 30);
+    })();
+  </script>
+</body>
+</html>
